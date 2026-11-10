@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Estimate Maker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mut:#6b7385;--bd:#dde1e8;--ac:#2557d6;--ac2:#e8eefc;--bad:#c0392b;--ok:#1e8e4e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141820;--card:#1d222c;--tx:#e8ebf2;--mut:#98a1b5;--bd:#2f3645;--ac:#6c9bff;--ac2:#23304f;--bad:#ff7b6b;--ok:#4cc98a}}
+:root[data-theme="dark"]{--bg:#141820;--card:#1d222c;--tx:#e8ebf2;--mut:#98a1b5;--bd:#2f3645;--ac:#6c9bff;--ac2:#23304f;--bad:#ff7b6b;--ok:#4cc98a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--bd);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:sticky;top:0;z-index:5}
+header h1{font-size:17px;margin:0 12px 0 0}nav{display:flex;gap:6px;flex-wrap:wrap}
+nav button{background:none;border:0;padding:7px 12px;border-radius:8px;color:var(--mut);cursor:pointer;font:inherit}
+nav button.on{background:var(--ac2);color:var(--ac);font-weight:600}
+main{max-width:1000px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+h2{font-size:16px;margin:0 0 12px}.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{min-height:70px;resize:vertical}
+button.b{background:var(--ac);color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
+button.g{background:var(--ac2);color:var(--ac);border:0;padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
+button.d{background:none;color:var(--bad);border:1px solid var(--bd);padding:6px 10px;border-radius:8px;cursor:pointer;font:inherit}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}.sp{flex:1}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:620px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--bd);vertical-align:middle}th{font-size:12px;color:var(--mut);font-weight:600}
+td input,td select{padding:6px}.r{text-align:right}.tot{margin-left:auto;max-width:340px}
+.tot div{display:flex;justify-content:space-between;padding:4px 0}.tot .big{font-size:18px;font-weight:700;border-top:1px solid var(--bd);margin-top:4px;padding-top:8px}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;background:var(--ac2);color:var(--ac)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.mut{color:var(--mut)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:9px 16px;border-radius:8px;display:none;z-index:9}
+.hid{display:none}.pv{display:none}
+@media print{header,.noprint,#toast{display:none!important}body{background:#fff;color:#000}.card{border:0;padding:0}.pv{display:block}.ed{display:none}input,select,textarea{border:0;background:none;color:#000}}
+</style><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script></head><body>
+<header class="noprint"><h1>Estimate Maker</h1>
+<nav id="nav"></nav></header>
+<main id="app"></main><div id="toast"></div>
+<script>
+const KEY='estimate_maker_v1';
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const fd=s=>{const m=String(s||'').split('-');return m.length===3&&m[0].length===4?m[2]+'/'+m[1]+'/'+m[0]:(s||'')};
+const pd=s=>{const m=String(s).trim().split(/[\/.-]/);if(m.length!==3)return '';let d=+m[0],o=+m[1],y=+m[2];if(!d||!o||!y)return '';if(y<100)y+=2000;const t=new Date(y,o-1,d);if(t.getFullYear()!==y||t.getMonth()!==o-1||t.getDate()!==d)return '';return y+'-'+String(o).padStart(2,'0')+'-'+String(d).padStart(2,'0')};
+const dI=(p,v)=>`<input placeholder="DD/MM/YYYY" value="${fd(v)}" onchange="${p}=pd(this.value);this.value=fd(${p})">`;
+const r2=n=>Math.round((n+Number.EPSILON)*100)/100;
+const money=n=>(S.cur||'₹')+' '+(r2(n)).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const blank=()=>({company:{name:'',address:'',phone:'',email:'',taxId:'',terms:'Thank you for your business.'},taxLabel:'GST',taxRate:18,defaultIncl:false,cur:'₹',prefix:'EST-',pad:4,next:1,parties:[],products:[],estimates:[]});
+let S=blank(),tab='dash',cur=null,q='',ledP='';
+function load(){try{const t=localStorage.getItem(KEY);if(t)S=Object.assign(blank(),JSON.parse(t))}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save in this browser')}}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',2200)}
+const numFor=n=>S.prefix+String(n).padStart(S.pad,'0');
+function calc(e){let sub=0,tax=0;e.items.forEach(i=>{const a=(+i.qty||0)*(+i.rate||0),t=+i.tax||0;let b,x;if(i.incl){b=a/(1+t/100);x=a-b}else{b=a;x=a*t/100}i._base=b;i._tax=x;i._tot=b+x;sub+=b;tax+=x});
+ const total=r2(sub+tax),paid=r2(e.payments.reduce((s,p)=>s+(+p.amount||0),0));return{sub:r2(sub),tax:r2(tax),total,paid,bal:r2(total-paid)}}
+function newItem(){return{name:'',qty:1,rate:0,tax:S.taxRate,incl:S.defaultIncl}}
+function newEst(){return{id:uid(),no:numFor(S.next),date:today(),delivery:'',partyId:'',notes:'',delivered:false,delOn:'',tiDone:false,tiNo:'',tiDate:'',items:[newItem()],payments:[],isNew:true}}
+function setTab(t){tab=t;render()}
+function render(){
+ const tabs=[['dash','Dashboard'],['list','Estimates'],['edit','Editor'],['parties','Parties'],['ledger','Ledger'],['products','Products'],['settings','Company & Tax'],['backup','Backup']];
+ document.getElementById('nav').innerHTML=tabs.map(([k,l])=>`<button class="${tab===k?'on':''}" onclick="setTab('${k}')">${l}</button>`).join('');
+ const a=document.getElementById('app');
+ a.innerHTML=({dash:vDash,ledger:vLedger,list:vList,edit:vEdit,parties:vParties,products:vProducts,settings:vSettings,backup:vBackup})[tab]();
+ if(tab==='edit')totals();
+}
+/* ---------- list ---------- */
+function status(e){const c=calc(e);return c.total>0&&c.bal<=0?['Paid','ok']:c.paid>0?['Part paid','']:['Unpaid','mut']}
+function vList(){
+ const pn=id=>(S.parties.find(p=>p.id===id)||{}).name||'—';
+ const L=S.estimates.filter(e=>(e.no+pn(e.partyId)).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>b.no.localeCompare(a.no,undefined,{numeric:true}));
+ return `<div class="bar noprint"><button class="b" onclick="startNew()">+ New estimate</button><input style="max-width:260px" placeholder="Search number or party" value="${esc(q)}" oninput="q=this.value;render();document.querySelector('.bar input').focus()"><span class="sp"></span><span class="mut">${S.estimates.length} estimates</span></div>
+ <div class="card tw">${L.length?`<table><tr><th>No.</th><th>Date</th><th>Party</th><th>Delivery</th><th class="r">Total</th><th class="r">Balance</th><th>Status</th><th>Delivered</th><th>Tax inv.</th><th></th></tr>`+L.map(e=>{const c=calc(e),s=status(e);return `<tr><td><b>${esc(e.no)}</b></td><td>${fd(e.date)}</td><td>${esc(pn(e.partyId))}</td><td>${fd(e.delivery)||'—'}</td><td class="r">${money(c.total)}</td><td class="r">${money(c.bal)}</td><td><span class="pill ${s[1]}">${s[0]}</span></td><td><input type="checkbox" style="width:auto" ${e.delivered?'checked':''} onchange="toggleDel('${e.id}',this.checked)"></td><td><input type="checkbox" style="width:auto" ${e.tiDone?'checked':''} onchange="toggleTI('${e.id}',this.checked)"></td><td style="white-space:nowrap"><button class="g" onclick="openEst('${e.id}')">Open</button> <button class="g" onclick="copyEst('${e.id}')">Copy</button> <button class="g" onclick="pdfEst(S.estimates.find(x=>x.id==='${e.id}'))">PDF</button> <button class="d" onclick="delEst('${e.id}')">Delete</button></td></tr>`}).join('')+`</table>`:`<p class="mut">No estimates yet. Click “New estimate”.</p>`}</div>`}
+function startNew(){cur=newEst();setTab('edit')}
+function openEst(id){cur=JSON.parse(JSON.stringify(S.estimates.find(e=>e.id===id)));setTab('edit')}
+function copyEst(id){const o=S.estimates.find(e=>e.id===id),c=JSON.parse(JSON.stringify(o));c.id=uid();c.no=numFor(S.next++);c.date=today();c.payments=[];c.delivery='';c.delivered=false;c.delOn='';c.tiDone=false;c.tiNo='';c.tiDate='';S.estimates.push(c);save();toast('Copied as '+c.no);render()}
+function delEst(id){if(confirm('Delete this estimate?')){S.estimates=S.estimates.filter(e=>e.id!==id);save();render()}}
+/* ---------- editor ---------- */
+function vEdit(){
+ if(!cur)cur=newEst();const e=cur;
+ return `<div class="ed"><div class="card"><div class="row">
+ <div><label>Estimate no. (auto)</label><input value="${esc(e.no)}" disabled></div>
+ <div><label>Date (DD/MM/YYYY)</label>${dI('cur.date',e.date)}</div>
+ <div><label>Delivery date (DD/MM/YYYY)</label>${dI('cur.delivery',e.delivery)}</div>
+ <div><label>Party</label><select onchange="cur.partyId=this.value"><option value="">— select —</option>${S.parties.map(p=>`<option value="${p.id}" ${p.id===e.partyId?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>
+ <div style="align-self:end"><button class="g" onclick="setTab('parties')">+ Create party</button></div></div></div>
+ <div class="card"><h2>Items</h2><div class="tw"><table><tr><th>Product / service</th><th style="width:80px">Qty</th><th style="width:110px">Rate</th><th style="width:80px">${esc(S.taxLabel)} %</th><th style="width:130px">Price is</th><th class="r" style="width:110px">Amount</th><th></th></tr>
+ ${e.items.map((i,n)=>`<tr><td><select onchange="pickProd(${n},this.value)"><option value="">— pick product —</option>${S.products.map(p=>`<option value="${p.id}" ${p.id===i.pid?'selected':''}>${esc(p.name)}</option>`).join('')}</select><input style="margin-top:4px" placeholder="Item name (or type your own)" value="${esc(i.name)}" oninput="cur.items[${n}].name=this.value"></td><td><input type="number" min="0" step="any" value="${i.qty}" oninput="cur.items[${n}].qty=this.value;totals()"></td><td><input type="number" min="0" step="any" value="${i.rate}" oninput="cur.items[${n}].rate=this.value;totals()"></td><td><input type="number" min="0" step="any" value="${i.tax}" oninput="cur.items[${n}].tax=this.value;totals()"></td><td><select onchange="cur.items[${n}].incl=this.value==='1';totals()"><option value="0" ${!i.incl?'selected':''}>Tax excluded</option><option value="1" ${i.incl?'selected':''}>Tax included</option></select></td><td class="r" id="la${n}"></td><td><button class="d" onclick="cur.items.splice(${n},1);if(!cur.items.length)cur.items.push(newItem());render()">×</button></td></tr>`).join('')}</table></div>
+ <div class="bar"><button class="g" onclick="cur.items.push(newItem());render()">+ Add item</button></div>
+ <div class="tot" id="tot"></div></div>
+ <div class="card"><h2>Payments received</h2><div class="tw"><table><tr><th>Date</th><th>Type</th><th>Mode</th><th>Amount</th><th>Note</th><th></th></tr>
+ ${e.payments.map((p,n)=>`<tr><td>${dI('cur.payments['+n+'].date',p.date)}</td><td><select onchange="cur.payments[${n}].type=this.value">${['Advance','Part payment','Final payment'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select></td><td><select onchange="cur.payments[${n}].mode=this.value">${['Cash','Bank'].map(t=>`<option ${p.mode===t?'selected':''}>${t}</option>`).join('')}</select></td><td><input type="number" min="0" step="any" value="${p.amount}" oninput="cur.payments[${n}].amount=this.value;totals()"></td><td><input value="${esc(p.note)}" placeholder="Ref / cheque / UTR" oninput="cur.payments[${n}].note=this.value"></td><td><button class="d" onclick="cur.payments.splice(${n},1);render()">×</button></td></tr>`).join('')||''}</table></div>
+ <div class="bar"><button class="g" onclick="cur.payments.push({date:today(),type:cur.payments.length?'Part payment':'Advance',mode:'Cash',amount:0,note:''});render()">+ Add payment</button></div></div>
+ <div class="card"><h2>Delivery &amp; accounts</h2><div class="row"><div><label><input type="checkbox" style="width:auto" ${e.delivered?'checked':''} onchange="cur.delivered=this.checked;if(this.checked&&!cur.delOn)cur.delOn=today();render()"> Delivered</label></div>${e.delivered?`<div><label>Delivered on</label>${dI('cur.delOn',e.delOn)}</div>`:''}<div><label><input type="checkbox" style="width:auto" ${e.tiDone?'checked':''} onchange="cur.tiDone=this.checked;render()"> Tax invoice generated in accounts</label></div>${e.tiDone?`<div><label>Tax invoice no.</label><input value="${esc(e.tiNo)}" oninput="cur.tiNo=this.value"></div><div><label>Tax invoice date</label>${dI('cur.tiDate',e.tiDate)}</div>`:''}</div></div>
+ <div class="card"><label>Notes / terms for this estimate</label><textarea oninput="cur.notes=this.value">${esc(e.notes)}</textarea></div>
+ <div class="bar"><button class="b" onclick="saveEst()">Save estimate</button><button class="g" onclick="pdfEst(cur)">Download PDF</button><button class="g" onclick="cur=null;setTab('list')">Close</button></div></div>`}
+function totals(){if(!cur)return;const c=calc(cur);cur.items.forEach((i,n)=>{const el=document.getElementById('la'+n);if(el)el.textContent=money(i._tot)});
+ const t=document.getElementById('tot');if(t)t.innerHTML=`<div><span>Subtotal (before tax)</span><span>${money(c.sub)}</span></div><div><span>${esc(S.taxLabel)}</span><span>${money(c.tax)}</span></div><div class="big"><span>Total</span><span>${money(c.total)}</span></div><div><span>Received</span><span class="ok">${money(c.paid)}</span></div><div><span><b>Balance due</b></span><span class="${c.bal>0?'bad':'ok'}"><b>${money(c.bal)}</b></span></div>`}
+function saveEst(){
+ if(!cur.partyId&&!confirm('No party selected. Save anyway?'))return;
+ const o=JSON.parse(JSON.stringify(cur));o.items.forEach(i=>{delete i._base;delete i._tax;delete i._tot});
+ if(o.isNew){S.next++;delete o.isNew;S.estimates.push(o)}else{const n=S.estimates.findIndex(e=>e.id===o.id);S.estimates[n]=o}
+ save();cur=o;toast('Saved '+o.no);render()}
+/* ---------- parties ---------- */
+let pe=null;
+function vParties(){const p=pe||{id:'',name:'',phone:'',email:'',address:'',taxId:''};
+ return `<div class="card"><h2>${p.id?'Edit party':'Create party'}</h2><div class="row">
+ <div><label>Name *</label><input id="pn" value="${esc(p.name)}"></div><div><label>Phone</label><input id="pp" value="${esc(p.phone)}"></div><div><label>Email</label><input id="pm" value="${esc(p.email)}"></div><div><label>${esc(S.taxLabel)} / Tax ID</label><input id="pt" value="${esc(p.taxId)}"></div></div>
+ <div style="margin-top:10px"><label>Address</label><textarea id="pa">${esc(p.address)}</textarea></div>
+ <div class="bar"><button class="b" onclick="saveParty('${p.id}')">Save party</button>${p.id?`<button class="g" onclick="pe=null;render()">Cancel</button>`:''}${cur?`<button class="g" onclick="setTab('edit')">Back to estimate</button>`:''}</div></div>
+ <div class="card tw"><h2>Parties (${S.parties.length})</h2>${S.parties.length?`<table><tr><th>Name</th><th>Phone</th><th>Email</th><th>Address</th><th></th></tr>${S.parties.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.phone)}</td><td>${esc(x.email)}</td><td>${esc(x.address)}</td><td style="white-space:nowrap"><button class="g" onclick="pe=S.parties.find(z=>z.id==='${x.id}');render()">Edit</button> <button class="d" onclick="delParty('${x.id}')">Delete</button></td></tr>`).join('')}</table>`:'<p class="mut">No parties yet.</p>'}</div>`}
+function saveParty(id){const v=k=>document.getElementById(k).value.trim();if(!v('pn')){toast('Name is required');return}
+ const o={id:id||uid(),name:v('pn'),phone:v('pp'),email:v('pm'),taxId:v('pt'),address:v('pa')};
+ if(id)S.parties[S.parties.findIndex(x=>x.id===id)]=o;else{S.parties.push(o);if(cur&&!cur.partyId)cur.partyId=o.id}
+ pe=null;save();toast('Party saved');render()}
+function delParty(id){if(S.estimates.some(e=>e.partyId===id)){toast('Party is used in estimates');return}if(confirm('Delete party?')){S.parties=S.parties.filter(x=>x.id!==id);save();render()}}
+/* ---------- dashboard / ledger ---------- */
+const dd=s=>Math.floor((new Date(today())-new Date(s))/864e5);
+const pnm=id=>(S.parties.find(p=>p.id===id)||{}).name||'(no party)';
+const itx=e=>e.items.map(i=>esc(i.name||'-')+' × '+i.qty).join(', ');
+function toggleDel(id,v){const e=S.estimates.find(x=>x.id===id);e.delivered=v;e.delOn=v?(e.delOn||today()):'';save();render();refreshDP()}
+function toggleTI(id,v){const e=S.estimates.find(x=>x.id===id);e.tiDone=v;save();render()}
+function delRows(L,act){return L.length?`<table><tr><th>No.</th><th>Party</th><th>Items</th><th>Delivery date</th>${act?'<th></th>':''}</tr>`+L.map(e=>`<tr><td><b>${esc(e.no)}</b></td><td>${esc(pnm(e.partyId))}</td><td>${itx(e)}</td><td>${fd(e.delivery)}</td>${act?`<td><button class='g' onclick="toggleDel('${e.id}',true)">Mark delivered</button></td>`:''}</tr>`).join('')+'</table>':`<p class='mut'>None.</p>`}
+function vDash(){
+ const t=today(),E=S.estimates.map(e=>({e,c:calc(e)})),open=E.filter(x=>x.c.bal>0.005);
+ const rec=open.reduce((s,x)=>s+x.c.bal,0),bill=E.reduce((s,x)=>s+x.c.total,0),got=E.reduce((s,x)=>s+x.c.paid,0);
+ const by={},ag=[0,0,0,0];
+ open.forEach(x=>{const k=x.e.partyId||'';by[k]=by[k]||{n:0,b:0};by[k].n++;by[k].b+=x.c.bal;const a=dd(x.e.date);ag[a<=30?0:a<=60?1:a<=90?2:3]+=x.c.bal});
+ const pend=S.estimates.filter(e=>!e.delivered&&e.delivery),srt=(a,b)=>a.delivery.localeCompare(b.delivery);
+ const tdy=pend.filter(e=>e.delivery===t),ovr=pend.filter(e=>e.delivery<t).sort(srt),upc=pend.filter(e=>e.delivery>t).sort(srt).slice(0,10);
+ const done=S.estimates.filter(e=>e.delivered).sort((a,b)=>(b.delOn||'').localeCompare(a.delOn||'')).slice(0,15);
+ const noTI=S.estimates.filter(e=>!e.tiDone).sort((a,b)=>a.date.localeCompare(b.date));
+ const kpi=(l,v,c)=>`<div class='card' style='margin:0'><label>${l}</label><div style='font-size:20px;font-weight:700' class='${c||''}'>${v}</div></div>`;
+ const AL=['0–30 days','31–60 days','61–90 days','Over 90 days'];
+ const res=e=>{if(!e.delOn||!e.delivery)return '—';const f=Math.round((new Date(e.delOn)-new Date(e.delivery))/864e5);return f>0?`<span class='bad'>${f} day(s) late</span>`:f<0?`<span class='ok'>${-f} day(s) early</span>`:`<span class='ok'>On time</span>`};
+ return `<div class='bar'><button class='b' onclick="showDispatch(false)">Today’s dispatches</button><span class='sp'></span><span class='mut'>Today: ${fd(t)}</span></div>
+ <div class='row' style='margin-bottom:14px'>${kpi('Total receivable',money(rec),rec>0?'bad':'ok')}${kpi('Total billed',money(bill))}${kpi('Received',money(got),'ok')}${kpi('Dispatch due today',tdy.length)}${kpi('Overdue deliveries',ovr.length,ovr.length?'bad':'')}${kpi('Tax invoice pending',noTI.length)}</div>
+ <div class='card tw'><h2>Receivables by party</h2>${open.length?`<table><tr><th>Party</th><th class='r'>Open estimates</th><th class='r'>Amount receivable</th><th></th></tr>`+Object.keys(by).sort((a,b)=>by[b].b-by[a].b).map(k=>`<tr><td><b>${esc(k?pnm(k):'(no party)')}</b></td><td class='r'>${by[k].n}</td><td class='r'>${money(by[k].b)}</td><td>${k?`<button class='g' onclick="ledP='${k}';setTab('ledger')">Ledger</button>`:''}</td></tr>`).join('')+`</table>`:`<p class='mut'>Nothing receivable.</p>`}</div>
+ <div class='card'><h2>Ageing (by estimate date)</h2><div class='row'>${AL.map((l,i)=>kpi(l,money(ag[i]),i>2&&ag[i]>0?'bad':'')).join('')}</div></div>
+ <div class='card tw'><h2>Dispatch due today (${tdy.length})</h2>${delRows(tdy,true)}</div>
+ <div class='card tw'><h2>Overdue deliveries (${ovr.length})</h2>${delRows(ovr,true)}</div>
+ <div class='card tw'><h2>Upcoming deliveries</h2>${delRows(upc,true)}</div>
+ <div class='card tw'><h2>Delivered (as per delivery date)</h2>${done.length?`<table><tr><th>No.</th><th>Party</th><th>Items</th><th>Planned</th><th>Delivered on</th><th>Result</th><th></th></tr>`+done.map(e=>`<tr><td><b>${esc(e.no)}</b></td><td>${esc(pnm(e.partyId))}</td><td>${itx(e)}</td><td>${fd(e.delivery)||'—'}</td><td>${fd(e.delOn)}</td><td>${res(e)}</td><td><button class='d' onclick="toggleDel('${e.id}',false)">Undo</button></td></tr>`).join('')+`</table>`:`<p class='mut'>Nothing marked delivered yet.</p>`}</div>
+ <div class='card tw'><h2>Tax invoice not yet generated in accounts (${noTI.length})</h2>${noTI.length?`<table><tr><th>No.</th><th>Date</th><th>Party</th><th class='r'>Total</th><th>Generated</th></tr>`+noTI.slice(0,15).map(e=>`<tr><td><b>${esc(e.no)}</b></td><td>${fd(e.date)}</td><td>${esc(pnm(e.partyId))}</td><td class='r'>${money(calc(e).total)}</td><td><input type='checkbox' style='width:auto' onchange="toggleTI('${e.id}',this.checked)"></td></tr>`).join('')+`</table>${noTI.length>15?`<p class='mut'>Showing the oldest 15. See the Estimates tab for all.</p>`:''}`:`<p class='mut'>All estimates are ticked.</p>`}</div>`}
+function vLedger(){
+ if(!S.parties.length)return `<div class='card'><p class='mut'>Create a party first.</p></div>`;
+ if(!S.parties.some(p=>p.id===ledP))ledP=S.parties[0].id;
+ const R=[];S.estimates.filter(e=>e.partyId===ledP).forEach(e=>{const c=calc(e);R.push({d:e.date,k:0,t:'Estimate '+e.no,dr:c.total,cr:0});e.payments.forEach(p=>R.push({d:p.date||e.date,k:1,t:p.type+' ('+p.mode+') – '+e.no+(p.note?' – '+p.note:''),dr:0,cr:+p.amount||0}))});
+ R.sort((a,b)=>a.d.localeCompare(b.d)||a.k-b.k);let bal=0,D=0,C=0;
+ const rows=R.map(r=>{bal+=r.dr-r.cr;D+=r.dr;C+=r.cr;return `<tr><td>${fd(r.d)}</td><td>${esc(r.t)}</td><td class='r'>${r.dr?money(r.dr):''}</td><td class='r'>${r.cr?money(r.cr):''}</td><td class='r'>${money(bal)}</td></tr>`}).join('');
+ const p=S.parties.find(x=>x.id===ledP);
+ return `<div class='card'><div class='row'><div><label>Party</label><select onchange="ledP=this.value;render()">${S.parties.map(x=>`<option value='${x.id}' ${x.id===ledP?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div><div style='align-self:end' class='mut'>${esc(p.phone)} ${esc(p.address)}</div></div></div>
+ <div class='card tw'><h2>Ledger – ${esc(p.name)}</h2>${R.length?`<table><tr><th>Date</th><th>Particulars</th><th class='r'>Billed (Dr)</th><th class='r'>Received (Cr)</th><th class='r'>Balance</th></tr>${rows}<tr><td></td><td><b>Total</b></td><td class='r'><b>${money(D)}</b></td><td class='r'><b>${money(C)}</b></td><td class='r ${bal>0?'bad':'ok'}'><b>${money(bal)}</b></td></tr></table><p class='mut'>Balance is the amount receivable from this party.</p>`:`<p class='mut'>No estimates for this party yet.</p>`}</div>
+ <div class='card tw'><h2>All parties</h2><table><tr><th>Party</th><th class='r'>Billed</th><th class='r'>Received</th><th class='r'>Balance</th><th></th></tr>${S.parties.map(x=>{let b=0,g=0;S.estimates.filter(e=>e.partyId===x.id).forEach(e=>{const c=calc(e);b+=c.total;g+=c.paid});return `<tr><td><b>${esc(x.name)}</b></td><td class='r'>${money(b)}</td><td class='r'>${money(g)}</td><td class='r'>${money(b-g)}</td><td><button class='g' onclick="ledP='${x.id}';render()">View</button></td></tr>`}).join('')}</table></div>`}
+function dispHtml(){const t=today(),L=S.estimates.filter(e=>!e.delivered&&e.delivery===t),O=S.estimates.filter(e=>!e.delivered&&e.delivery&&e.delivery<t);
+ return `<div class='bar' style='margin-top:0'><b style='font-size:16px'>Today’s dispatches – ${fd(t)}</b><span class='sp'></span><button class='d' onclick="closeDP()">Close</button></div>`+(L.length?`<div class='tw'>${delRows(L,true)}</div>`:`<p class='mut'>Nothing is due for dispatch today.</p>`)+(O.length?`<p class='bad'><b>${O.length} overdue</b> – delivery date passed, not marked delivered</p><div class='tw'>${delRows(O,true)}</div>`:'')}
+function showDispatch(auto){if(auto&&!S.estimates.some(e=>!e.delivered&&e.delivery===today()))return;closeDP();
+ const o=document.createElement('div');o.id='dp';o.className='noprint';o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;display:flex;align-items:center;justify-content:center;padding:12px';
+ o.innerHTML=`<div class='card' style='width:min(900px,100%);max-height:90%;overflow:auto;margin:0'>${dispHtml()}</div>`;document.body.appendChild(o)}
+function refreshDP(){const o=document.getElementById('dp');if(o)o.firstChild.innerHTML=dispHtml()}
+function closeDP(){const o=document.getElementById('dp');if(o)o.remove()}
+/* ---------- pdf ---------- */
+async function pdfEst(e){
+ if(!e)return;
+ const J=window.jspdf&&window.jspdf.jsPDF;let dl=null;try{dl=await claude.use('downloads')}catch(x){}
+ if(!J){toast('PDF library did not load');return}
+ const c=calc(e),p=S.parties.find(x=>x.id===e.partyId)||{name:''},co=S.company;
+ const sym=(S.cur||'').replace('₹','Rs.');
+ const m=n=>sym+' '+r2(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const d=new J({unit:'mm',format:'a4'});let y=16;
+ const T=(t,x,yy,o)=>d.text(String(t==null?'':t),x,yy,o);
+ d.setFont('helvetica','bold').setFontSize(16);T(co.name||'Your Company',14,y);
+ d.setFontSize(20);T('ESTIMATE',196,y,{align:'right'});
+ d.setFont('helvetica','normal').setFontSize(9);y+=6;
+ [co.address,co.phone&&'Phone: '+co.phone,co.email,co.taxId&&S.taxLabel+' / Reg: '+co.taxId].filter(Boolean).flatMap(s=>d.splitTextToSize(s,95)).forEach(s=>{T(s,14,y);y+=4.5});
+ ['No: '+e.no,'Date: '+fd(e.date),'Delivery: '+(fd(e.delivery)||'-')].forEach((s,i)=>T(s,196,22+i*5,{align:'right'}));
+ y=Math.max(y,40)+2;d.setDrawColor(180).line(14,y,196,y);y+=6;
+ d.setFont('helvetica','bold');T('Estimate for',14,y);y+=5;d.setFont('helvetica','normal');
+ [p.name,p.address,p.phone,p.taxId&&S.taxLabel+': '+p.taxId].filter(Boolean).flatMap(s=>d.splitTextToSize(s,120)).forEach(s=>{T(s,14,y);y+=4.5});
+ y+=4;
+ const hdr=()=>{d.setFillColor(235,238,245).rect(14,y-4.5,182,7,'F');d.setFont('helvetica','bold');T('#',16,y);T('Item',24,y);T('Qty',104,y,{align:'right'});T('Rate',130,y,{align:'right'});T('Tax %',146,y,{align:'right'});T('Tax',170,y,{align:'right'});T('Amount',194,y,{align:'right'});d.setFont('helvetica','normal');y+=7};
+ hdr();
+ e.items.forEach((i,n)=>{
+  const nm=d.splitTextToSize((i.name||'-')+(i.incl?' [price incl. tax]':''),76);
+  if(y+nm.length*4.5>275){d.addPage();y=16;hdr()}
+  T(n+1,16,y);nm.forEach((s,k)=>T(s,24,y+k*4.5));T(i.qty,104,y,{align:'right'});T(m(+i.rate||0),130,y,{align:'right'});T(i.tax,146,y,{align:'right'});T(m(i._tax),170,y,{align:'right'});T(m(i._tot),194,y,{align:'right'});
+  y+=nm.length*4.5+2;d.setDrawColor(225).line(14,y-3.5,196,y-3.5)});
+ if(y>235){d.addPage();y=16}
+ y+=3;
+ [['Subtotal (before tax)',c.sub],[S.taxLabel,c.tax],['Total',c.total],['Received',c.paid],['Balance due',c.bal]].forEach(([l,v],k)=>{
+  d.setFont('helvetica',(k===2||k===4)?'bold':'normal').setFontSize(k===2?11:9);T(l,150,y,{align:'right'});T(m(v),194,y,{align:'right'});y+=k===2?7:5});
+ d.setFontSize(9).setFont('helvetica','normal');y+=3;
+ if(e.payments.length){
+  if(y>240){d.addPage();y=16}
+  d.setFont('helvetica','bold');T('Payments received',14,y);y+=5;d.setFont('helvetica','normal');
+  e.payments.forEach(q=>{if(y>280){d.addPage();y=16}T(fd(q.date),14,y);T(q.type,40,y);T(q.mode,72,y);T(q.note||'',92,y);T(m(+q.amount||0),194,y,{align:'right'});y+=5});
+  y+=3}
+ [e.notes,co.terms].filter(Boolean).flatMap(s=>d.splitTextToSize(s,182)).forEach(s=>{if(y>285){d.addPage();y=16}T(s,14,y);y+=4.5});
+ const safe=s=>String(s).replace(/[\\/:*?"<>|]+/g,'').trim().replace(/\s+/g,'_');
+ const filename=safe(e.no)+(p.name?'_'+safe(p.name):'')+'.pdf';
+ if(dl){dl.save({filename,data:d.output('arraybuffer')}).then(()=>toast('PDF saved')).catch(er=>{if(!er||er.code!=='declined')toast('Could not save PDF'+(er&&er.code?' ('+er.code+')':''))});return}
+ const u=URL.createObjectURL(d.output('blob'));
+ try{const a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove()}catch(x){}
+ showPdf(u,filename)
+}
+function showPdf(u,fn){
+ const o=document.createElement('div');o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;display:flex;align-items:center;justify-content:center;padding:12px';
+ o.innerHTML='<div class="card" style="width:min(900px,100%);height:92%;display:flex;flex-direction:column;margin:0"><div class="bar" style="margin-top:0"><b>'+esc(fn)+'</b><span class="sp"></span><a class="g" style="text-decoration:none;padding:7px 12px;border-radius:8px" href="'+u+'" download="'+esc(fn)+'" target="_blank">Download / open</a><button class="d" id="xc">Close</button></div><p class="mut" style="margin:0 0 8px">If no download started, use the save icon in the viewer below. Or open this artifact directly in your browser tab, where the Download PDF button saves the file.</p><iframe src="'+u+'" style="flex:1;width:100%;border:1px solid var(--bd);border-radius:8px"></iframe></div>';
+ document.body.appendChild(o);o.querySelector('#xc').onclick=()=>o.remove()
+}
+/* ---------- products ---------- */
+let pre=null;
+function pickProd(n,id){const p=S.products.find(x=>x.id===id),i=cur.items[n];i.pid=id;if(p){i.name=p.name;i.rate=p.rate;i.tax=p.tax;i.incl=p.incl}render()}
+function vProducts(){const p=pre||{id:'',name:'',unit:'',rate:'',tax:S.taxRate,incl:S.defaultIncl,desc:''};
+ return `<div class="card"><h2>${p.id?'Edit product':'Create product'}</h2><div class="row">
+ <div><label>Product / service name *</label><input id="rn" value="${esc(p.name)}"></div>
+ <div><label>Unit (pcs, kg, hr…)</label><input id="ru" value="${esc(p.unit)}"></div>
+ <div><label>Rate</label><input id="rr" type="number" min="0" step="any" value="${p.rate}"></div>
+ <div><label>${esc(S.taxLabel)} %</label><input id="rt" type="number" min="0" step="any" value="${p.tax}"></div>
+ <div><label>Rate is</label><select id="ri"><option value="0" ${!p.incl?'selected':''}>Tax excluded</option><option value="1" ${p.incl?'selected':''}>Tax included</option></select></div></div>
+ <div style="margin-top:10px"><label>Description</label><textarea id="rd">${esc(p.desc)}</textarea></div>
+ <div class="bar"><button class="b" onclick="saveProduct('${p.id}')">Save product</button>${p.id?`<button class="g" onclick="pre=null;render()">Cancel</button>`:''}${cur?`<button class="g" onclick="setTab('edit')">Back to estimate</button>`:''}</div></div>
+ <div class="card tw"><h2>Products (${S.products.length})</h2>${S.products.length?`<table><tr><th>Name</th><th>Unit</th><th class="r">Rate</th><th>${esc(S.taxLabel)} %</th><th>Price is</th><th></th></tr>${S.products.map(x=>`<tr><td><b>${esc(x.name)}</b><div class="mut">${esc(x.desc)}</div></td><td>${esc(x.unit)}</td><td class="r">${money(+x.rate||0)}</td><td>${x.tax}</td><td>${x.incl?'Tax included':'Tax excluded'}</td><td style="white-space:nowrap"><button class="g" onclick="pre=S.products.find(z=>z.id==='${x.id}');render()">Edit</button> <button class="d" onclick="delProduct('${x.id}')">Delete</button></td></tr>`).join('')}</table>`:'<p class="mut">No products yet.</p>'}<p class="mut">Editing a product does not change estimates already saved.</p></div>`}
+function saveProduct(id){const v=k=>document.getElementById(k).value.trim();if(!v('rn')){toast('Name is required');return}
+ const o={id:id||uid(),name:v('rn'),unit:v('ru'),rate:+v('rr')||0,tax:+v('rt')||0,incl:v('ri')==='1',desc:v('rd')};
+ if(id)S.products[S.products.findIndex(x=>x.id===id)]=o;else S.products.push(o);
+ pre=null;save();toast('Product saved');render()}
+function delProduct(id){if(confirm('Delete product? Saved estimates keep their items.')){S.products=S.products.filter(x=>x.id!==id);save();render()}}
+/* ---------- settings ---------- */
+function vSettings(){const c=S.company,f=(k,l,v)=>`<div><label>${l}</label><input value="${esc(v)}" oninput="${k}"></div>`;
+ return `<div class="card"><h2>Company profile</h2><div class="row">
+ ${f("S.company.name=this.value","Company name",c.name)}${f("S.company.phone=this.value","Phone",c.phone)}${f("S.company.email=this.value","Email",c.email)}${f("S.company.taxId=this.value","Tax / registration no.",c.taxId)}</div>
+ <div style="margin-top:10px"><label>Address</label><textarea oninput="S.company.address=this.value">${esc(c.address)}</textarea></div>
+ <div style="margin-top:10px"><label>Default terms (printed on estimate)</label><textarea oninput="S.company.terms=this.value">${esc(c.terms)}</textarea></div></div>
+ <div class="card"><h2>Tax &amp; numbering</h2><div class="row">
+ ${f("S.taxLabel=this.value","Tax name (GST, VAT…)",S.taxLabel)}
+ <div><label>Default tax rate %</label><input type="number" step="any" value="${S.taxRate}" oninput="S.taxRate=+this.value"></div>
+ <div><label>Default for new items</label><select onchange="S.defaultIncl=this.value==='1'"><option value="0" ${!S.defaultIncl?'selected':''}>Price excludes tax</option><option value="1" ${S.defaultIncl?'selected':''}>Price includes tax</option></select></div>
+ ${f("S.cur=this.value","Currency symbol",S.cur)}${f("S.prefix=this.value","Number prefix",S.prefix)}
+ <div><label>Next number</label><input type="number" min="1" value="${S.next}" oninput="S.next=Math.max(1,+this.value||1)"></div></div>
+ <p class="mut">Tax rate and included/excluded setting can also be changed per item inside each estimate. Existing estimates are not changed.</p>
+ <div class="bar"><button class="b" onclick="save();toast('Settings saved')">Save settings</button></div></div>`}
+/* ---------- backup ---------- */
+function vBackup(){return `<div class="card"><h2>Backup (JSON)</h2><p class="mut">Data is stored in this browser. Export regularly and keep the JSON safe.</p>
+ <div class="bar"><button class="b" onclick="doExport()">Export JSON</button><button class="g" onclick="copyJson()">Copy</button><button class="g" onclick="dl()">Download file</button></div>
+ <textarea id="js" style="min-height:200px;font-family:monospace;font-size:12px" placeholder="Exported JSON appears here. To import, paste JSON here or choose a file."></textarea>
+ <div class="bar"><input type="file" id="fi" accept=".json,application/json" style="max-width:260px" onchange="readF(this)"><button class="g" onclick="doImport(false)">Import &amp; merge</button><button class="d" onclick="doImport(true)">Import &amp; replace all</button></div></div>`}
+function doExport(){document.getElementById('js').value=JSON.stringify(S,null,2);toast('Exported')}
+function copyJson(){const t=document.getElementById('js');if(!t.value)doExport();t.select();try{document.execCommand('copy');toast('Copied')}catch(e){toast('Select and copy manually')}}
+function dl(){const t=document.getElementById('js');if(!t.value)doExport();try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t.value],{type:'application/json'}));a.download='estimates-backup-'+today()+'.json';a.click()}catch(e){toast('Use Copy instead')}}
+function readF(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById('js').value=r.result;toast('File loaded — choose import')};r.readAsText(f)}
+function doImport(rep){let d;try{d=JSON.parse(document.getElementById('js').value)}catch(e){toast('Invalid JSON');return}
+ if(!d||!Array.isArray(d.estimates)||!Array.isArray(d.parties)){toast('Not an estimate backup');return}
+ if(rep){if(!confirm('Replace ALL current data?'))return;S=Object.assign(blank(),d)}
+ else{d.parties.forEach(p=>{if(!S.parties.some(x=>x.id===p.id))S.parties.push(p)});d.estimates.forEach(e=>{if(!S.estimates.some(x=>x.id===e.id))S.estimates.push(e)});(d.products||[]).forEach(p=>{if(!S.products.some(x=>x.id===p.id))S.products.push(p)});S.next=Math.max(S.next,d.next||1)}
+ save();toast('Imported');setTab('list')}
+load();render();setTimeout(()=>showDispatch(true),400);
+</script></body></html>
